@@ -4,10 +4,14 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.MediaType;
-import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.support.RestClientAdapter;
+import org.springframework.web.service.annotation.DeleteExchange;
+import org.springframework.web.service.annotation.GetExchange;
+import org.springframework.web.service.invoker.HttpServiceProxyFactory;
+
+import java.util.List;
 
 @SpringBootApplication
 public class HttpInterfaceApplication {
@@ -29,26 +33,26 @@ class HttpConfiguration {
         .build();
   }
 
+  @Bean
+  PostsClient postsClient(RestClient restClient) {
+    return HttpServiceProxyFactory
+        .builderFor(RestClientAdapter.create(restClient))
+        .build()
+        .createClient(PostsClient.class);
+  }
+
 }
 
-@Service
-class PostsService {
+interface PostsClient {
 
-  private final RestClient restClient;
+  @GetExchange("/posts/{id}")
+  Post getPost(@PathVariable int id);
 
-  public PostsService(RestClient restClient) {
-    this.restClient = restClient;
-  }
+  @GetExchange("/posts")
+  List<Post> getPosts();
 
-  public Post getPost(int id) {
-    return restClient
-        .get()
-        .uri("https://jsonplaceholder.typicode.com/posts/{id}", id)
-        .accept(MediaType.APPLICATION_JSON)
-        .retrieve()
-        .body(Post.class);
-  }
-
+  @DeleteExchange("/posts/{id}")
+  void deletePost(@PathVariable int id);
 }
 
 record Post(int userId, int id, String title, String body) {
@@ -58,15 +62,25 @@ record Post(int userId, int id, String title, String body) {
 @RequestMapping
 class PostsRestController {
 
-  private final PostsService postsService;
+  private final PostsClient postsClient;
 
-  public PostsRestController(PostsService postsService) {
-    this.postsService = postsService;
+  public PostsRestController(PostsClient postsClient) {
+    this.postsClient = postsClient;
   }
 
   @GetMapping("/posts/{id}")
   public Post getPost(@PathVariable int id) {
-    return postsService.getPost(id);
+    return postsClient.getPost(id);
+  }
+
+  @GetMapping("/posts")
+  public List<Post> getPosts() {
+    return postsClient.getPosts();
+  }
+
+  @DeleteMapping("/posts/{id}")
+  public void deletePost(@PathVariable int id) {
+    postsClient.deletePost(id);
   }
 
 }
